@@ -1,9 +1,11 @@
-import React from "react";
-// --- CORRECCIÓN: Se ajusta la ruta de importación para que coincida con la estructura del proyecto ---
+import React, { useState, useMemo } from "react";
+import { Filter, ArrowUp, ArrowDown, Search } from "lucide-react";
 import { TaskCard } from "./TaskCard";
 import type { Task } from "../types";
 
 type Status = "Por Hacer" | "En Progreso" | "Hecho";
+type SortBy = "priority" | "order";
+type SortOrder = "asc" | "desc";
 
 interface KanbanColumnProps {
   title: string;
@@ -12,7 +14,8 @@ interface KanbanColumnProps {
   onDragOver: (e: React.DragEvent<HTMLDivElement>) => void;
   onDrop: (e: React.DragEvent<HTMLDivElement>, status: Status) => void;
   onEdit: (task: Task) => void;
-  onDelete: (taskId: string) => void;
+  onDelete: (task: Task) => void;
+  onComplete: (taskId: string) => void;
   onDragStart: (e: React.DragEvent<HTMLDivElement>, taskId: string) => void;
 }
 
@@ -24,6 +27,7 @@ const KanbanColumn: React.FC<KanbanColumnProps> = ({
   onDrop,
   onEdit,
   onDelete,
+  onComplete,
   onDragStart,
 }) => {
   const columnColors: Record<Status, string> = {
@@ -34,7 +38,7 @@ const KanbanColumn: React.FC<KanbanColumnProps> = ({
 
   return (
     <div
-      className={`bg-gray-800/50 rounded-lg p-3 flex-shrink-0 w-full md:w-96 ${columnColors[status]}`}
+      className={`bg-gray-800/50 rounded-lg p-3 flex-shrink-0 w-full md:w-96 flex flex-col ${columnColors[status]}`}
       onDragOver={onDragOver}
       onDrop={(e) => onDrop(e, status)}
     >
@@ -44,13 +48,14 @@ const KanbanColumn: React.FC<KanbanColumnProps> = ({
           {tasks.length}
         </span>
       </h3>
-      <div className="h-full space-y-3 overflow-y-auto pr-1">
+      <div className="space-y-3 overflow-y-auto pr-1 flex-grow">
         {tasks.map((task) => (
           <TaskCard
             key={task.id}
             task={task}
             onEdit={onEdit}
             onDelete={onDelete}
+            onComplete={onComplete}
             onDragStart={onDragStart}
           />
         ))}
@@ -62,7 +67,8 @@ const KanbanColumn: React.FC<KanbanColumnProps> = ({
 interface KanbanBoardProps {
   tasks: Task[];
   onEdit: (task: Task) => void;
-  onDelete: (taskId: string) => void;
+  onDelete: (task: Task) => void;
+  onComplete: (taskId: string) => void;
   onUpdateTaskStatus: (taskId: string, newStatus: Status) => void;
 }
 
@@ -70,9 +76,40 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
   tasks,
   onEdit,
   onDelete,
+  onComplete,
   onUpdateTaskStatus,
 }) => {
+  const [searchTerm, setSearchTerm] = useState("");
+  const [sortBy, setSortBy] = useState<SortBy>("order");
+  const [sortOrder, setSortOrder] = useState<SortOrder>("asc");
+
   const statuses: Status[] = ["Por Hacer", "En Progreso", "Hecho"];
+
+  const processedTasks = useMemo(() => {
+    let filteredTasks = tasks;
+
+    if (searchTerm) {
+      filteredTasks = tasks.filter((task) =>
+        task.title.toLowerCase().includes(searchTerm.toLowerCase())
+      );
+    }
+
+    const priorityOrder: Record<string, number> = {
+      Alta: 2,
+      Media: 1,
+      Baja: 0,
+    };
+
+    return [...filteredTasks].sort((a, b) => {
+      let comparison = 0;
+      if (sortBy === "priority") {
+        comparison = priorityOrder[a.priority] - priorityOrder[b.priority];
+      } else {
+        comparison = a.order - b.order;
+      }
+      return sortOrder === "asc" ? comparison : -comparison;
+    });
+  }, [tasks, searchTerm, sortBy, sortOrder]);
 
   const handleDragStart = (
     e: React.DragEvent<HTMLDivElement>,
@@ -95,20 +132,64 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
   };
 
   return (
-    <div className="p-4 md:p-6 flex-grow flex flex-col md:flex-row gap-6 overflow-x-auto">
-      {statuses.map((status) => (
-        <KanbanColumn
-          key={status}
-          title={status}
-          status={status}
-          tasks={tasks.filter((t) => t.status === status)}
-          onDragOver={handleDragOver}
-          onDrop={handleDrop}
-          onEdit={onEdit}
-          onDelete={onDelete}
-          onDragStart={handleDragStart}
-        />
-      ))}
+    <div className="p-4 md:p-6 h-full flex flex-col">
+      <div className="flex-shrink-0 mb-4 p-3 bg-gray-800 rounded-lg flex flex-wrap items-center gap-4">
+        <div className="relative flex-grow md:flex-grow-0">
+          <Search
+            className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
+            size={20}
+          />
+          <input
+            type="text"
+            placeholder="Buscar tarea..."
+            className="bg-gray-700 text-white rounded-lg pl-10 pr-4 py-2 w-full md:w-64 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+          />
+        </div>
+        <div className="flex items-center gap-2 text-white">
+          <Filter size={20} className="text-gray-400" />
+          <select
+            value={sortBy}
+            onChange={(e) => {
+              const newSortBy = e.target.value as SortBy;
+              setSortBy(newSortBy);
+              setSortOrder(newSortBy === "order" ? "asc" : "desc");
+            }}
+            className="bg-gray-700 text-white rounded-lg px-3 py-2 border-transparent focus:outline-none focus:ring-2 focus:ring-indigo-500"
+          >
+            <option value="order">Orden</option>
+            <option value="priority">Prioridad</option>
+          </select>
+          <button
+            onClick={() => setSortOrder(sortOrder === "asc" ? "desc" : "asc")}
+            className="p-2 bg-gray-700 rounded-lg hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+          >
+            {sortOrder === "asc" ? (
+              <ArrowUp size={20} />
+            ) : (
+              <ArrowDown size={20} />
+            )}
+          </button>
+        </div>
+      </div>
+
+      <div className="flex-grow flex flex-col md:flex-row gap-6 overflow-x-auto">
+        {statuses.map((status) => (
+          <KanbanColumn
+            key={status}
+            title={status}
+            status={status}
+            tasks={processedTasks.filter((t) => t.status === status)}
+            onDragOver={handleDragOver}
+            onDrop={handleDrop}
+            onEdit={onEdit}
+            onDelete={onDelete}
+            onComplete={onComplete}
+            onDragStart={handleDragStart}
+          />
+        ))}
+      </div>
     </div>
   );
 };

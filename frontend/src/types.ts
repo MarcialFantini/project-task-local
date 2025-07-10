@@ -11,6 +11,7 @@ export interface Epic {
   projectId: string;
 }
 export interface Task {
+  createdAt: string | number | Date;
   id: string;
   title: string;
   description?: string | null;
