@@ -82,8 +82,12 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
   const [searchTerm, setSearchTerm] = useState("");
   const [sortBy, setSortBy] = useState<SortBy>("order");
   const [sortOrder, setSortOrder] = useState<SortOrder>("asc");
+  const [showCompleted, setShowCompleted] = useState(true);
 
   const statuses: Status[] = ["Por Hacer", "En Progreso", "Hecho"];
+  const visibleStatuses = showCompleted
+    ? statuses
+    : statuses.filter((s) => s !== "Hecho");
 
   const processedTasks = useMemo(() => {
     let filteredTasks = tasks;
@@ -172,10 +176,22 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
             )}
           </button>
         </div>
+        <div className="flex items-center gap-2 text-white">
+          <label htmlFor="show-completed" className="text-sm cursor-pointer">
+            Mostrar completadas
+          </label>
+          <input
+            id="show-completed"
+            type="checkbox"
+            checked={showCompleted}
+            onChange={(e) => setShowCompleted(e.target.checked)}
+            className="h-4 w-4 rounded bg-gray-700 border-gray-600 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
+          />
+        </div>
       </div>
 
       <div className="flex-grow flex flex-col md:flex-row gap-6 overflow-x-auto">
-        {statuses.map((status) => (
+        {visibleStatuses.map((status) => (
           <KanbanColumn
             key={status}
             title={status}

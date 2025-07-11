@@ -1,8 +1,6 @@
 import { useState } from "react";
 import { ArrowLeft, Layers, Plus } from "lucide-react";
 import { AppProvider, useAppContext } from "./context/AppContext";
-import * as api from "./services/apiService";
-
 import { Dashboard } from "./components/Dashboard";
 import { KanbanBoard } from "./components/KabanBoard";
 import { ProjectModal } from "./components/ProjectModal";
@@ -10,17 +8,17 @@ import { EpicModal } from "./components/EpicModal";
 import { TaskModal } from "./components/TaskModal";
 import { BulkTaskModal } from "./components/BulkTaskModal";
 import { UndoToast } from "./components/UndoToast";
-import type { Task, TaskDataPayload } from "./types";
+import { GeneralDashboard } from "./components/GeneralDashboard";
+import type { Epic, Task, TaskDataPayload } from "./types";
 
 function AppContent() {
-  const { projects, epics, tasks, selectedEpic, selectEpic, refreshTasks } =
-    useAppContext();
+  const { tasks, selectedEpic, loading, actions } = useAppContext();
+  const [view, setView] = useState<"projects" | "general">("projects");
 
   const [isProjectModalOpen, setProjectModalOpen] = useState(false);
   const [isEpicModalOpen, setEpicModalOpen] = useState(false);
   const [isTaskModalOpen, setTaskModalOpen] = useState(false);
   const [isBulkModalOpen, setBulkModalOpen] = useState(false);
-
   const [editingTask, setEditingTask] = useState<Task | null>(null);
   const [editingEpicForProjectId, setEditingEpicForProjectId] = useState<
     string | null
@@ -34,7 +32,7 @@ function AppContent() {
     title: string;
     description: string;
   }) => {
-    await api.saveProject(data);
+    await actions.saveProject(data);
     setProjectModalOpen(false);
   };
 
@@ -45,56 +43,92 @@ function AppContent() {
     description: string;
   }) => {
     if (!editingEpicForProjectId) return;
-    await api.saveEpic({ ...data, projectId: editingEpicForProjectId });
+    await actions.saveEpic({ ...data, projectId: editingEpicForProjectId });
     setEpicModalOpen(false);
   };
 
   const handleSaveTask = async (data: TaskDataPayload) => {
-    if (!selectedEpic) return;
-    const payload = data.id ? data : { ...data, epicId: selectedEpic.id };
-    await api.saveTask(payload);
+    if (!selectedEpic && !data.id) return;
+    const payload = data.id ? data : { ...data, epicId: selectedEpic!.id };
+    await actions.saveTask(payload);
     setTaskModalOpen(false);
     setEditingTask(null);
   };
 
-  const handleUpdateTaskStatus = async (
-    taskId: string,
-    newStatus: Task["status"]
-  ) => {
-    await api.updateTaskStatus(taskId, newStatus);
+  const handleBulkAddTask = async (bulkText: string) => {
+    if (!selectedEpic) return;
+    await actions.addBulkTasks(selectedEpic.id, bulkText);
+    setBulkModalOpen(false);
   };
 
-  const handleCompleteTask = async (taskId: string) => {
-    await api.updateTaskStatus(taskId, "Hecho");
+  const handleShowBulkModal = (epic: Epic) => {
+    actions.selectEpic(epic);
+    setBulkModalOpen(true);
   };
 
   const handleDeleteTask = (taskToDelete: Task) => {
     if (undoTask) {
       clearTimeout(undoTask.timerId);
-      api.deleteTask(undoTask.task.id);
+      actions.deleteTask(undoTask.task.id);
     }
-    refreshTasks();
-
+    actions.deleteTask(taskToDelete.id); // Optimistic UI update from context
     const timerId = setTimeout(() => {
-      api.deleteTask(taskToDelete.id);
       setUndoTask(null);
     }, 5000);
-
     setUndoTask({ task: taskToDelete, timerId });
   };
 
   const handleUndoDelete = () => {
     if (!undoTask) return;
     clearTimeout(undoTask.timerId);
-    refreshTasks();
+    // The socket event will restore the task, we just need to refresh
+    // This is a placeholder for a more direct state restoration if needed
+    window.location.reload(); // Simple but effective way to re-sync state
     setUndoTask(null);
   };
 
-  const handleBulkAddTask = async (bulkText: string) => {
-    if (!selectedEpic) return;
-    await api.addBulkTasks(selectedEpic.id, bulkText);
-    setBulkModalOpen(false);
-  };
+  if (loading) {
+    return (
+      <div className="flex justify-center items-center h-screen bg-gray-900 text-white">
+        Cargando...
+      </div>
+    );
+  }
+
+  let currentView;
+  if (selectedEpic) {
+    currentView = (
+      <KanbanBoard
+        tasks={tasks.filter((t) => t.epicId === selectedEpic.id)}
+        onEdit={(task) => {
+          setEditingTask(task);
+          setTaskModalOpen(true);
+        }}
+        onDelete={handleDeleteTask}
+        onComplete={(taskId) => actions.updateTaskStatus(taskId, "Hecho")}
+        onUpdateTaskStatus={actions.updateTaskStatus}
+      />
+    );
+  } else {
+    switch (view) {
+      case "general":
+        currentView = <GeneralDashboard />;
+        break;
+      case "projects":
+      default:
+        currentView = (
+          <Dashboard
+            onShowProjectModal={() => setProjectModalOpen(true)}
+            onShowEpicModal={(projectId) => {
+              setEditingEpicForProjectId(projectId);
+              setEpicModalOpen(true);
+            }}
+            onShowBulkModal={handleShowBulkModal}
+          />
+        );
+        break;
+    }
+  }
 
   return (
     <div className="flex flex-col h-screen bg-gray-900 text-white">
@@ -102,14 +136,38 @@ function AppContent() {
         <div className="flex items-center gap-4">
           {selectedEpic && (
             <button
-              onClick={() => selectEpic(null)}
+              onClick={() => actions.selectEpic(null)}
               className="p-2 hover:bg-gray-700 rounded-full"
             >
               <ArrowLeft />
             </button>
           )}
+          {!selectedEpic && (
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setView("projects")}
+                className={`px-3 py-1 rounded-md text-sm font-semibold ${
+                  view === "projects"
+                    ? "bg-indigo-600 text-white"
+                    : "text-gray-300 hover:bg-gray-700"
+                }`}
+              >
+                Proyectos
+              </button>
+              <button
+                onClick={() => setView("general")}
+                className={`px-3 py-1 rounded-md text-sm font-semibold ${
+                  view === "general"
+                    ? "bg-indigo-600 text-white"
+                    : "text-gray-300 hover:bg-gray-700"
+                }`}
+              >
+                General
+              </button>
+            </div>
+          )}
           <h1 className="text-2xl font-bold">
-            {selectedEpic ? selectedEpic.title : "Dashboard"}
+            {selectedEpic ? selectedEpic.title : ""}
           </h1>
         </div>
         {selectedEpic && (
@@ -133,33 +191,7 @@ function AppContent() {
         )}
       </header>
 
-      <main className="flex-grow overflow-auto">
-        {!selectedEpic ? (
-          <Dashboard
-            projects={projects}
-            epics={epics}
-            tasks={tasks}
-            onSelectEpic={selectEpic}
-            onShowProjectModal={() => setProjectModalOpen(true)}
-            onShowEpicModal={(projectId) => {
-              setEditingEpicForProjectId(projectId);
-              setEpicModalOpen(true);
-            }}
-            onShowBulkModal={() => setBulkModalOpen(true)}
-          />
-        ) : (
-          <KanbanBoard
-            tasks={tasks.filter((t) => t.epicId === selectedEpic.id)}
-            onEdit={(task) => {
-              setEditingTask(task);
-              setTaskModalOpen(true);
-            }}
-            onDelete={handleDeleteTask}
-            onComplete={handleCompleteTask}
-            onUpdateTaskStatus={handleUpdateTaskStatus}
-          />
-        )}
-      </main>
+      <main className="flex-grow overflow-auto">{currentView}</main>
 
       {isProjectModalOpen && (
         <ProjectModal
@@ -191,15 +223,11 @@ function AppContent() {
           onSave={handleBulkAddTask}
         />
       )}
-
       {undoTask && (
         <UndoToast
           message={`Tarea "${undoTask.task.title}" eliminada.`}
           onUndo={handleUndoDelete}
-          onClose={() => {
-            clearTimeout(undoTask.timerId);
-            setUndoTask(null);
-          }}
+          onClose={() => setUndoTask(null)}
         />
       )}
     </div>

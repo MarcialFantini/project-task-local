@@ -1,5 +1,4 @@
-// src/modules/tasks/tasks.service.ts
-import { Prisma } from "@prisma/client";
+import { Prisma, Task } from "@prisma/client";
 import { Server } from "socket.io";
 import { prisma } from "../../core/database";
 
@@ -24,7 +23,7 @@ export class TaskService {
       },
     });
 
-    io.emit("tasks_updated");
+    io.emit("task:created", newTask);
     return newTask;
   }
 
@@ -33,19 +32,20 @@ export class TaskService {
       where: { id },
       data,
     });
-    io.emit("tasks_updated");
+
+    io.emit("task:updated", updatedTask);
     return updatedTask;
   }
 
   async remove(id: string, io: Server) {
-    await prisma.task.delete({ where: { id } });
-    io.emit("tasks_updated");
+    await prisma.task.deleteMany({ where: { id } });
+
+    io.emit("task:deleted", { id });
   }
 
   async createManyFromText(epicId: string, bulkText: string, io: Server) {
     const lines = bulkText.split("\n").filter((line) => line.trim() !== "");
     if (lines.length === 0) {
-      // Es mejor lanzar un error para que el controlador lo capture
       throw new Error("No se encontraron tareas válidas para crear.");
     }
 
@@ -94,7 +94,7 @@ export class TaskService {
           description,
           priority,
           epicId,
-          order: startingOrder + index, // Asigna el orden de forma secuencial
+          order: startingOrder + index,
           status: "Por Hacer",
         });
       }
@@ -104,11 +104,11 @@ export class TaskService {
       throw new Error("El texto no contenía tareas con un formato válido.");
     }
 
-    const result = await prisma.task.createMany({
+    await prisma.task.createMany({
       data: tasksToCreate,
     });
 
-    io.emit("tasks_updated"); // Notificar al front-end
-    return result;
+    // Para creación en bloque, recargar todo sigue siendo una opción razonable.
+    io.emit("tasks_updated");
   }
 }

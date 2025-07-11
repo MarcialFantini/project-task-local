@@ -1,28 +1,22 @@
 import React from "react";
+import { useAppContext } from "../context/AppContext";
 import { ProjectCard } from "./ProjectCard";
 import { Plus } from "lucide-react";
-import type { Project, Epic, Task } from "../types";
+import type { Epic } from "../types";
 
 interface DashboardProps {
-  projects: Project[];
-  epics: Epic[];
-  tasks: Task[];
   onShowProjectModal: () => void;
   onShowEpicModal: (projectId: string) => void;
-  onSelectEpic: (epic: Epic) => void;
-  // --- PROP AÑADIDA ---
   onShowBulkModal: (epic: Epic) => void;
 }
 
 export const Dashboard: React.FC<DashboardProps> = ({
-  projects,
-  epics,
-  tasks,
   onShowProjectModal,
   onShowEpicModal,
-  onSelectEpic,
   onShowBulkModal,
 }) => {
+  const { projects, epics, tasks, actions } = useAppContext();
+
   return (
     <div className="p-4 md:p-8">
       <div className="flex justify-between items-center mb-6">
@@ -45,9 +39,8 @@ export const Dashboard: React.FC<DashboardProps> = ({
               project={project}
               epics={epics.filter((e) => e.projectId === project.id)}
               tasks={tasks}
-              onShowEpicModal={onShowEpicModal}
-              onSelectEpic={onSelectEpic}
-              // --- PROP PASADA AL HIJO ---
+              onSelectEpic={actions.selectEpic}
+              onShowEpicModal={() => onShowEpicModal(project.id)}
               onShowBulkModal={onShowBulkModal}
             />
           ))
