@@ -1,3 +1,4 @@
+import React, { useState, useMemo } from "react";
 import { ChevronRight, Plus, Layers } from "lucide-react";
 import type { Project, Epic, Task } from "../types";
 
@@ -18,6 +19,22 @@ export const ProjectCard: React.FC<ProjectCardProps> = ({
   onShowEpicModal,
   onShowBulkModal,
 }) => {
+  const [showCompletedEpics, setShowCompletedEpics] = useState(false);
+
+  const processedEpics = useMemo(() => {
+    if (showCompletedEpics) {
+      return epics;
+    }
+    return epics.filter((epic) => {
+      const epicTasks = tasks.filter((t) => t.epicId === epic.id);
+      if (epicTasks.length === 0) {
+        return true;
+      }
+      const completedTasks = epicTasks.filter((t) => t.status === "Hecho");
+      return epicTasks.length !== completedTasks.length;
+    });
+  }, [epics, tasks, showCompletedEpics]);
+
   const handleBulkClick = (e: React.MouseEvent, epic: Epic) => {
     e.stopPropagation();
     onShowBulkModal(epic);
@@ -27,16 +44,33 @@ export const ProjectCard: React.FC<ProjectCardProps> = ({
     <div className="bg-gray-800/50 rounded-lg p-4">
       <div className="flex justify-between items-center mb-4">
         <h2 className="text-xl font-bold">{project.title}</h2>
-        <button
-          onClick={onShowEpicModal}
-          className="flex items-center text-sm bg-indigo-600/20 hover:bg-indigo-600/40 text-indigo-300 font-semibold py-1 px-3 rounded-lg"
-        >
-          <Plus size={16} className="mr-1" />
-          Nueva Épica
-        </button>
+        <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2 text-white">
+            <label
+              htmlFor={`show-completed-${project.id}`}
+              className="text-xs text-gray-400 cursor-pointer"
+            >
+              Mostrar completadas
+            </label>
+            <input
+              id={`show-completed-${project.id}`}
+              type="checkbox"
+              checked={showCompletedEpics}
+              onChange={(e) => setShowCompletedEpics(e.target.checked)}
+              className="h-4 w-4 rounded bg-gray-700 border-gray-600 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
+            />
+          </div>
+          <button
+            onClick={onShowEpicModal}
+            className="flex items-center text-sm bg-indigo-600/20 hover:bg-indigo-600/40 text-indigo-300 font-semibold py-1 px-3 rounded-lg"
+          >
+            <Plus size={16} className="mr-1" />
+            Nueva Épica
+          </button>
+        </div>
       </div>
       <div className="space-y-2">
-        {epics.map((epic) => {
+        {processedEpics.map((epic) => {
           const epicTasks = tasks.filter((t) => t.epicId === epic.id);
           const completedTasks = epicTasks.filter(
             (t) => t.status === "Hecho"
